@@ -16,6 +16,7 @@ add_library(lua_static STATIC ${LUA_SOURCES})
 add_library(HPR_Idle_Detection_Extension SHARED 
     src/library.cpp
 )
+set_target_properties(HPR_Idle_Detection_Extension PROPERTIES PREFIX "")
 
 if (MSVC)
     target_compile_options(HPR_Idle_Detection_Extension PRIVATE /MP $<$<CONFIG:Release,MinSizeRel>:/O1 /GL /Gy /Gw>)

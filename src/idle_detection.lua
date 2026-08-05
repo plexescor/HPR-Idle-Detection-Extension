@@ -15,18 +15,33 @@ function init()
 
     local extDir = (HPR.getExtensionAbsoluteDir ~= nil) and HPR.getExtensionAbsoluteDir() or HPR.getExtensionDir()
 
+    local candidates = {}
     if HPR.getOsName() == "Windows" then
-        dllPath = extDir .. "HPR_Idle_Detection_Extension.dll"
+        candidates = {
+            extDir .. "HPR_Idle_Detection_Extension.dll",
+            extDir .. "libHPR_Idle_Detection_Extension.dll"
+        }
     else
-        dllPath = extDir .. "HPR_Idle_Detection_Extension.so"
+        candidates = {
+            extDir .. "HPR_Idle_Detection_Extension.so",
+            extDir .. "libHPR_Idle_Detection_Extension.so"
+        }
     end
 
     HPR.log(HPR.extensionName, "Extension dir: " .. extDir)
-    HPR.log(HPR.extensionName, "DLL path: " .. dllPath)
     HPR.log(HPR.extensionName, "package.loadlib = " .. tostring(package.loadlib))
 
-    initializer, err = package.loadlib(dllPath, "initialiseFunctions")
+    local dllPath = candidates[1]
+    for _, path in ipairs(candidates) do
+        HPR.log(HPR.extensionName, "Attempting to load library: " .. path)
+        initializer, err = package.loadlib(path, "initialiseFunctions")
+        if initializer then
+            dllPath = path
+            break
+        end
+    end
 
+    HPR.log(HPR.extensionName, "Selected DLL path: " .. dllPath)
     HPR.log(HPR.extensionName, "initializer = " .. tostring(initializer))
     HPR.log(HPR.extensionName, "error = " .. tostring(err))
 
