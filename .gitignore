@@ -1,0 +1,20 @@
+# Build & Output directories
+build/
+bin/
+out/
+.vs/
+.vscode/
+
+# Compiled Binaries & Libraries
+*.dll
+*.so
+*.dylib
+*.exp
+*.lib
+*.obj
+*.o
+*.a
+
+# OS & Editor generated files
+.DS_Store
+Thumbs.db
