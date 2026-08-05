@@ -33,3 +33,10 @@ target_include_directories(HPR_Idle_Detection_Extension PRIVATE external/sol2/)
 target_link_libraries(HPR_Idle_Detection_Extension PRIVATE
     lua_static
 )
+
+if (UNIX AND NOT APPLE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GIO REQUIRED gio-2.0)
+    target_include_directories(HPR_Idle_Detection_Extension PRIVATE ${GIO_INCLUDE_DIRS})
+    target_link_libraries(HPR_Idle_Detection_Extension PRIVATE ${GIO_LIBRARIES})
+endif()
