@@ -5,6 +5,7 @@ project(HPR_Idle_Detection_Extension LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Lua static lib
 file(GLOB_RECURSE LUA_SOURCES "external/lua/*.c")
