@@ -62,6 +62,38 @@ idle-threshold,<time_in_milliseconds>
    - If idle time exceeds the threshold and the active window title is not ignored (e.g. YouTube), tracking pauses automatically via `HPR.stopTracking()`.
    - When user activity resumes, tracking automatically starts again via `HPR.startTracking()`.
 
+## Build Dependencies
+
+To compile the extension from source, you need a C++23 compatible compiler (GCC 13+, Clang 16+, or MSVC 2022), CMake (>= 3.15), and `pkg-config`.
+
+### Linux Dependencies (`gio/gio.h` Support)
+Compiling GNOME Mutter D-Bus idle detection on Linux requires GLib / GIO 2.0 development headers (`gio/gio.h`). Install them for your distribution:
+
+- **Ubuntu / Debian / Linux Mint:**
+  ```bash
+  sudo apt install build-essential cmake pkg-config libglib2.0-dev
+  ```
+- **Fedora / RHEL / CentOS:**
+  ```bash
+  sudo dnf install gcc-c++ cmake pkgconfig glib2-devel
+  ```
+- **Arch Linux / Manjaro:**
+  ```bash
+  sudo pacman -S base-devel cmake pkgconf glib2
+  ```
+- **openSUSE:**
+  ```bash
+  sudo zypper install gcc-c++ cmake pkg-config glib2-devel
+  ```
+- **Alpine Linux:**
+  ```bash
+  sudo apk add build-base cmake pkgconf glib-dev
+  ```
+
+### Windows Dependencies
+- **Visual Studio 2022 / MSVC** (with C++ Desktop Development workload)
+- **CMake** (3.15+)
+
 ## Build Instructions
 
 Using CMake:
