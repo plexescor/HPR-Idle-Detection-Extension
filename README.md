@@ -4,6 +4,13 @@ A native C++ & Lua extension for **HPR** (Human Pattern Recorder) that monitors 
 
 **Developed by:** Plexescor
 
+## Support Matrix
+
+| Operating System | Support Status |
+| :--- | :--- |
+| **Windows** | ✅ Supported |
+| **Linux** | 🚧 In Progress (Being worked upon) |
+
 ## Structure
 
 - `src/` — Native C++ module source code.
