@@ -6,10 +6,14 @@ A native C++ & Lua extension for **HPR** (Human Pattern Recorder) that monitors 
 
 ## Support Matrix
 
-| Operating System | Support Status |
+| Platform / Desktop Environment | Support Status |
 | :--- | :--- |
 | **Windows** | ✅ Supported |
-| **Linux** | 🚧 In Progress (Being worked upon) |
+| **Linux (GNOME)** | ✅ Supported |
+| **Linux (KDE Plasma)** | 🚧 In Progress |
+| **Linux (Hyprland)** | 🚧 In Progress |
+| **Linux (niri)** | 🚧 In Progress |
+| **Linux (Cinnamon)** | 🚧 In Progress |
 
 ## Structure
 
