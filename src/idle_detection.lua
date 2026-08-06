@@ -1,6 +1,10 @@
 HPR.extensionName = "HPR Idle Detection Extension"
 HPR.authorName = "Plexescor"
 
+--because HPR.getExtensionAbsoluteDir() api is introduced in
+--v0.9.7, so this extension only supports HPR of this version and above(in the future)
+HPR.versionSupport = { "v0.9.7" }
+
 local initializer, err
 local started = true
 local defaultThreshold = 8 * 60 * 1000 --8min
