@@ -8,7 +8,9 @@ HPR.versionSupport = { "v0.9.7" }
 local initializer, err
 local started = true
 local defaultThreshold = 8 * 60 * 1000 --8min
+local defaultPollInterval = 5000        --5s
 local currentIdleThreshold
+local currentPollInterval
 
 local ignoredTitles = {
     "youtube",
@@ -57,22 +59,28 @@ function init()
     initializer()
     HPR.log(HPR.extensionName, "initialiseFunctions returned successfully")
 
-    currentIdleThreshold = HPR.readCsv(
-        HPR.getExtensionDir() .. "idle_detection_config.csv",
-        "idle-threshold"
-    )
+    local configPath = HPR.getExtensionDir() .. "idle_detection_config.csv"
 
+    -- idle-threshold
+    currentIdleThreshold = HPR.readCsv(configPath, "idle-threshold")
     if currentIdleThreshold == "" then
-        HPR.writeCsv(
-            HPR.getExtensionDir() .. "idle_detection_config.csv",
-            "idle-threshold",
-            defaultThreshold
-        )
+        HPR.writeCsv(configPath, "idle-threshold", defaultThreshold)
         currentIdleThreshold = defaultThreshold
     end
 
-    return 5000
+    -- poll-interval
+    currentPollInterval = HPR.readCsv(configPath, "poll-interval")
+    if currentPollInterval == "" then
+        HPR.writeCsv(configPath, "poll-interval", defaultPollInterval)
+        currentPollInterval = defaultPollInterval
+    end
+
+    HPR.log(HPR.extensionName, "idle-threshold = " .. tostring(currentIdleThreshold) .. "ms")
+    HPR.log(HPR.extensionName, "poll-interval  = " .. tostring(currentPollInterval) .. "ms")
+
+    return currentPollInterval
 end
+
 function onTick(delta)
     --What we will do is call a function and it returns some status
     --sort of like this
@@ -103,5 +111,7 @@ function onTick(delta)
 end
 
 function onExit()
-
+    if destroy then
+        destroy()
+    end
 end

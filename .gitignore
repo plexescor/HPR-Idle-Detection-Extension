@@ -3,6 +3,7 @@ build/
 bin/
 out/
 .vs/
+.cache
 .vscode/
 
 # Compiled Binaries & Libraries
