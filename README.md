@@ -10,10 +10,10 @@ A native C++ & Lua extension for **HPR** (Human Pattern Recorder) that monitors 
 | :--- | :--- |
 | **Windows** | ✅ Supported |
 | **Linux (GNOME)** | ✅ Supported |
-| **Linux (KDE Plasma)** | 🚧 In Progress |
+| **Linux (KDE Plasma)** | ❌ Not Supported Currently |
 | **Linux (Hyprland)** | ✅ Supported |
 | **Linux (niri)** | ✅ Supported |
-| **Linux (Cinnamon)** | 🚧 In Progress |
+| **Linux (Cinnamon)** | ✅ Supported |
 
 ## Structure
 
@@ -69,13 +69,13 @@ The native library selects the appropriate idle detection method at runtime base
 | Platform | Backend | How it works |
 | :--- | :--- | :--- |
 | **Windows** | `GetLastInputInfo` (Win32 API) | Queries the timestamp of the last input event directly from the OS |
-| **Linux — GNOME** | `org.gnome.Mutter.IdleMonitor` (D-Bus) | Calls the Mutter compositor's D-Bus `GetIdletime` method |
+| **Linux — GNOME / Cinnamon** | `org.gnome.Mutter.IdleMonitor` / `org.cinnamon.Muffin.IdleMonitor` (D-Bus) | Calls the Mutter/Muffin compositor's D-Bus `GetIdletime` method |
 | **Linux — other Wayland** | `ext-idle-notify-v1` (Wayland protocol) | Subscribes to compositor idle/resumed events in a background thread; elapsed time since the `idled` event is the idle duration |
 
-The Wayland backend works with any compositor that implements the standard `ext-idle-notify-v1` protocol, including **KDE/KWin**, **Hyprland**, **Sway**, **niri**, and others.
+The Wayland backend works with any compositor that implements the standard `ext-idle-notify-v1` protocol, including **Hyprland**, **Sway**, **niri**, and others.
 
 > [!WARNING]
-> **X11 sessions are not supported.** If you are running a desktop on X11 (e.g. KDE on X11, Openbox, i3 on X), the extension will load successfully but idle detection will always return "not idle" and tracking will never be paused automatically. Only Wayland sessions are supported on non-GNOME Linux desktops.
+> **X11 sessions are not supported.** If you are running a desktop on X11 (e.g. Openbox, i3 on X), the extension will load successfully but idle detection will always return "not idle" and tracking will never be paused automatically. Only Wayland sessions are supported on non-GNOME Linux desktops.
 
 ## Build Dependencies
 

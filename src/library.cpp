@@ -13,44 +13,71 @@
     #define EXPORT_SYMBOL
 #endif
 
-// ─── GNOME D-Bus idle detection ────────────────────────────────────────────
+// ─── GNOME / Cinnamon D-Bus idle detection ──────────────────────────────────
 #ifdef __linux__
-uint64_t getGnomeIdleTimeMs()
+static bool queryDbusIdleTime(const char* serviceName,
+                               const char* objectPath,
+                               const char* interfaceName,
+                               uint64_t& outIdleMs)
 {
     GError* error = nullptr;
     GDBusProxy* proxy = g_dbus_proxy_new_for_bus_sync(
         G_BUS_TYPE_SESSION,
         G_DBUS_PROXY_FLAGS_NONE,
         nullptr,
-        "org.gnome.Mutter.IdleMonitor",
-        "/org/gnome/Mutter/IdleMonitor/Core",
-        "org.gnome.Mutter.IdleMonitor",
+        serviceName,
+        objectPath,
+        interfaceName,
         nullptr, &error);
 
     if (!proxy)
     {
         if (error)
             g_error_free(error);
-        return 0;
+        return false;
     }
 
     GVariant* result = g_dbus_proxy_call_sync(
         proxy, "GetIdletime", nullptr,
         G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &error);
 
-    uint64_t idleMs = 0;
-    if (result)
+    bool success = false;
+    if (result && !error)
     {
-        g_variant_get(result, "(t)", &idleMs);
+        g_variant_get(result, "(t)", &outIdleMs);
         g_variant_unref(result);
+        success = true;
     }
+
     if (error)
     {
         g_error_free(error);
     }
 
     g_object_unref(proxy);
-    return idleMs;
+    return success;
+}
+
+uint64_t getDbusIdleTimeMs()
+{
+    uint64_t idleMs = 0;
+    // 1. Try GNOME Mutter IdleMonitor
+    if (queryDbusIdleTime("org.gnome.Mutter.IdleMonitor",
+                          "/org/gnome/Mutter/IdleMonitor/Core",
+                          "org.gnome.Mutter.IdleMonitor", idleMs))
+    {
+        return idleMs;
+    }
+
+    // 2. Try Cinnamon Muffin IdleMonitor
+    if (queryDbusIdleTime("org.cinnamon.Muffin.IdleMonitor",
+                          "/org/cinnamon/Muffin/IdleMonitor/Core",
+                          "org.cinnamon.Muffin.IdleMonitor", idleMs))
+    {
+        return idleMs;
+    }
+
+    return 0;
 }
 #endif // __linux__
 
@@ -323,17 +350,24 @@ uint64_t getIdleTimeMs()
     return GetTickCount64() - lii.dwTime;
 
 #elif defined(__linux__)
-    // GNOME: use the Mutter D-Bus IdleMonitor (most accurate for GNOME).
+    // GNOME / Cinnamon: try D-Bus IdleMonitor (Mutter / Muffin)
     const char* xdgDesktop = std::getenv("XDG_CURRENT_DESKTOP");
     if (xdgDesktop != nullptr)
     {
         std::string desktopStr(xdgDesktop);
         if (desktopStr.find("GNOME") != std::string::npos ||
-            desktopStr.find("gnome") != std::string::npos)
+            desktopStr.find("gnome") != std::string::npos ||
+            desktopStr.find("Cinnamon") != std::string::npos ||
+            desktopStr.find("cinnamon") != std::string::npos)
         {
-            return getGnomeIdleTimeMs();
+            return getDbusIdleTimeMs();
         }
     }
+
+    // Always attempt D-Bus query before other fallbacks
+    uint64_t dbusIdle = getDbusIdleTimeMs();
+    if (dbusIdle > 0)
+        return dbusIdle;
 
     // Non-GNOME Wayland (KDE/Plasma, Hyprland, Sway, niri, …)
     // Requires ext-idle-notify-v1 protocol support in the compositor.
