@@ -126,12 +126,3 @@ add_custom_command(TARGET HPR_Idle_Detection_Extension POST_BUILD
 
     COMMAND_EXPAND_LISTS
 )
-
-if(WIN32)
-    add_custom_command(TARGET HPR_Idle_Detection_Extension POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:HPR_Idle_Detection_Extension>
-            "${HPR_EXTENSION_DIR}/"
-        COMMAND_EXPAND_LISTS
-    )
-endif()
