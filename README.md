@@ -15,6 +15,8 @@ A native C++ & Lua extension for **HPR** (Human Pattern Recorder) that monitors 
 | **Linux (niri)** | ✅ Supported |
 | **Linux (Cinnamon)** | ✅ Supported |
 
+## Warnings
+As HPR relies on wayland protocols to find the idle status/time, if you have enabled no idle timeout in your compositor, HPR-Idle-Detection will not work
 ## Structure
 
 - `src/` — Native C++ module source code.
