@@ -2,8 +2,8 @@ HPR.extensionName = "HPR Idle Detection Extension"
 HPR.authorName = "Plexescor"
 
 --because HPR.getExtensionAbsoluteDir() api is introduced in
---v0.9.7, so this extension only supports HPR of this version and above(in the future)
-HPR.versionSupport = { "v0.9.7" }
+-- v0.9.7, so this extension only supports HPR of this version and above(in the future)
+HPR.versionSupport = { "v0.9.7", "v0.9.8" }
 
 local initializer, err
 local started = true
