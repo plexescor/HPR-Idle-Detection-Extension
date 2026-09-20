@@ -10,7 +10,7 @@ A native C++ & Lua extension for **HPR** (Human Pattern Recorder) that monitors 
 | :--- | :--- |
 | **Windows** | ✅ Supported |
 | **Linux (GNOME)** | ✅ Supported |
-| **Linux (KDE Plasma)** | ❌ Not Supported Currently |
+| **Linux (KDE Plasma 6)** | ✅ Supported (Beta tho) |
 | **Linux (Hyprland)** | ✅ Supported |
 | **Linux (niri)** | ✅ Supported |
 | **Linux (Cinnamon)** | ✅ Supported |

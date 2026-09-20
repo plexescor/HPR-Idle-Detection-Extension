@@ -3,11 +3,11 @@ HPR.authorName = "Plexescor"
 
 --because HPR.getExtensionAbsoluteDir() api is introduced in
 -- v0.9.7, so this extension only supports HPR of this version and above(in the future)
-HPR.versionSupport = { "v0.9.7", "v0.9.8" }
+HPR.versionSupport = { "v0.9.7", "v0.9.8", "v0.9.9", "v0.9.10" }
 
 local initializer, err
 local started = true
-local defaultThreshold = 8 * 60 * 1000 --8min
+local defaultThreshold = 5 * 60 * 1000 --5min
 local defaultPollInterval = 5000        --5s
 local currentIdleThreshold
 local currentPollInterval

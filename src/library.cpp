@@ -94,10 +94,6 @@ uint64_t getDbusIdleTimeMs()
 
 namespace {
 
-// Minimum notification timeout passed to get_idle_notification (ms).
-// The compositor fires "idled" only after this many ms of inactivity.
-constexpr uint32_t WAYLAND_IDLE_NOTIFY_TIMEOUT_MS = 1000;
-
 struct WaylandIdleTracker
 {
     wl_display*               display      = nullptr;
@@ -106,27 +102,33 @@ struct WaylandIdleTracker
     wl_seat*                  seat         = nullptr;
     ext_idle_notification_v1* notification = nullptr;
 
-    // Written by Wayland thread, read by calling thread.
-    std::atomic<bool>     isIdle{false};
-    // Milliseconds since epoch when "idled" fired, 0 when not idle.
-    std::atomic<uint64_t> idleStartMs{0};
+    uint32_t boundNotifierVersion = 1;
 
+    // Written by Wayland thread, read by Lua calling thread.
+    std::atomic<bool>     isIdle{false};
+    std::atomic<uint64_t> currentThresholdMs{0};
+
+    // Synchronization for threshold updates and worker thread.
+    std::mutex  trackerMutex;
     std::thread workerThread;
     bool        initialized = false;
 
-    // Pipe used to wake the worker thread for clean shutdown.
-    // [0] = read end (polled by worker), [1] = write end (written by shutdown()).
+    // Pipe used to wake the worker thread for threshold change or clean shutdown.
+    // [0] = read end (polled by worker), [1] = write end.
     int wakeupPipe[2] = { -1, -1 };
 
     // ── registry listener ──────────────────────────────────────────────────
     static void onGlobal(void* data, wl_registry* reg,
-                         uint32_t name, const char* interface, uint32_t /*version*/)
+                         uint32_t name, const char* interface, uint32_t version)
     {
         auto* self = static_cast<WaylandIdleTracker*>(data);
         if (std::string_view(interface) == ext_idle_notifier_v1_interface.name)
         {
+            // Prefer version 2 if available (supports get_input_idle_notification)
+            uint32_t bindVer = (version >= 2) ? 2 : 1;
+            self->boundNotifierVersion = bindVer;
             self->notifier = static_cast<ext_idle_notifier_v1*>(
-                wl_registry_bind(reg, name, &ext_idle_notifier_v1_interface, 1));
+                wl_registry_bind(reg, name, &ext_idle_notifier_v1_interface, bindVer));
         }
         else if (std::string_view(interface) == wl_seat_interface.name)
         {
@@ -145,11 +147,6 @@ struct WaylandIdleTracker
     static void onIdled(void* data, ext_idle_notification_v1*)
     {
         auto* self = static_cast<WaylandIdleTracker*>(data);
-        using namespace std::chrono;
-        uint64_t nowMs = static_cast<uint64_t>(
-            duration_cast<milliseconds>(
-                steady_clock::now().time_since_epoch()).count());
-        self->idleStartMs.store(nowMs, std::memory_order_relaxed);
         self->isIdle.store(true, std::memory_order_release);
     }
 
@@ -157,14 +154,50 @@ struct WaylandIdleTracker
     {
         auto* self = static_cast<WaylandIdleTracker*>(data);
         self->isIdle.store(false, std::memory_order_release);
-        self->idleStartMs.store(0, std::memory_order_relaxed);
     }
 
     static const ext_idle_notification_v1_listener idleListener;
 
-    // ── worker loop ────────────────────────────────────────────────────────
-    bool init()
+    // Must be called with trackerMutex held
+    void setupNotificationLocked(uint64_t thresholdMs)
     {
+        if (!notifier || !seat || !display)
+            return;
+
+        if (notification)
+        {
+            ext_idle_notification_v1_destroy(notification);
+            notification = nullptr;
+        }
+
+        uint32_t timeout = static_cast<uint32_t>(thresholdMs);
+        if (boundNotifierVersion >= 2)
+        {
+            notification = ext_idle_notifier_v1_get_input_idle_notification(
+                notifier, timeout, seat);
+        }
+        else
+        {
+            notification = ext_idle_notifier_v1_get_idle_notification(
+                notifier, timeout, seat);
+        }
+
+        if (notification)
+        {
+            ext_idle_notification_v1_add_listener(notification, &idleListener, this);
+            isIdle.store(false, std::memory_order_release);
+            currentThresholdMs.store(thresholdMs, std::memory_order_release);
+            wl_display_flush(display);
+        }
+    }
+
+    // ── worker loop ────────────────────────────────────────────────────────
+    bool init(uint64_t initialThresholdMs)
+    {
+        std::lock_guard<std::mutex> lock(trackerMutex);
+        if (initialized)
+            return true;
+
         display = wl_display_connect(nullptr);
         if (!display)
             return false;
@@ -187,39 +220,26 @@ struct WaylandIdleTracker
             return false;
         }
 
-        notification = ext_idle_notifier_v1_get_idle_notification(
-            notifier, WAYLAND_IDLE_NOTIFY_TIMEOUT_MS, seat);
-        if (!notification)
-        {
-            cleanup();
-            return false;
-        }
-
-        ext_idle_notification_v1_add_listener(notification, &idleListener, this);
-        wl_display_roundtrip(display);
-
         if (pipe(wakeupPipe) != 0)
         {
             cleanup();
             return false;
         }
 
+        setupNotificationLocked(initialThresholdMs);
+
         initialized = true;
 
-        // Dispatch loop using prepare_read + poll so the thread can be
-        // interrupted cleanly via the wakeup pipe without data races.
         workerThread = std::thread([this]()
         {
-            const int wlFd     = wl_display_get_fd(display);
-            const int wakeFd   = wakeupPipe[0];
+            const int wlFd   = wl_display_get_fd(display);
+            const int wakeFd = wakeupPipe[0];
 
             while (true)
             {
-                // Flush any pending outgoing requests.
                 if (wl_display_flush(display) < 0)
                     break;
 
-                // Prepare to read — serialise with any concurrent readers.
                 while (wl_display_prepare_read(display) != 0)
                     wl_display_dispatch_pending(display);
 
@@ -229,11 +249,28 @@ struct WaylandIdleTracker
 
                 const int ret = poll(fds, 2, -1);
 
-                if (ret < 0 || (fds[1].revents & POLLIN))
+                if (ret < 0)
                 {
-                    // Woken by shutdown() or poll error — cancel the read lock and exit.
                     wl_display_cancel_read(display);
                     break;
+                }
+
+                if (fds[1].revents & POLLIN)
+                {
+                    char cmd = 0;
+                    (void)read(wakeFd, &cmd, 1);
+                    wl_display_cancel_read(display);
+
+                    if (cmd == 'Q') // Quit
+                    {
+                        break;
+                    }
+                    else if (cmd == 'U') // Update threshold notification
+                    {
+                        std::lock_guard<std::mutex> lk(trackerMutex);
+                        setupNotificationLocked(currentThresholdMs.load(std::memory_order_acquire));
+                    }
+                    continue;
                 }
 
                 if (fds[0].revents & POLLIN)
@@ -248,27 +285,39 @@ struct WaylandIdleTracker
         return true;
     }
 
+    void updateThreshold(uint64_t newThresholdMs)
+    {
+        if (newThresholdMs == currentThresholdMs.load(std::memory_order_acquire))
+            return;
+
+        currentThresholdMs.store(newThresholdMs, std::memory_order_release);
+
+        if (initialized && wakeupPipe[1] != -1)
+        {
+            const char cmd = 'U';
+            (void)write(wakeupPipe[1], &cmd, 1);
+        }
+    }
+
     // ── clean shutdown — safe to call from any thread ──────────────────────
     void shutdown()
     {
+        std::lock_guard<std::mutex> lock(trackerMutex);
         if (!initialized)
             return;
 
-        // Signal the worker thread via the wakeup pipe, then join it.
         if (wakeupPipe[1] != -1)
         {
-            const char sig = 1;
-            (void)write(wakeupPipe[1], &sig, 1);
+            const char cmd = 'Q';
+            (void)write(wakeupPipe[1], &cmd, 1);
         }
 
         if (workerThread.joinable())
             workerThread.join();
 
-        // Close the pipe ends.
         if (wakeupPipe[0] != -1) { close(wakeupPipe[0]); wakeupPipe[0] = -1; }
         if (wakeupPipe[1] != -1) { close(wakeupPipe[1]); wakeupPipe[1] = -1; }
 
-        // Destroy Wayland objects (single-threaded now — worker has exited).
         if (notification) { ext_idle_notification_v1_destroy(notification); notification = nullptr; }
         if (notifier)     { ext_idle_notifier_v1_destroy(notifier);          notifier     = nullptr; }
         if (seat)         { wl_seat_release(seat);                           seat         = nullptr; }
@@ -287,17 +336,9 @@ struct WaylandIdleTracker
         if (display)      { wl_display_disconnect(display);                  display      = nullptr; }
     }
 
-    uint64_t getIdleMs() const
+    bool getIsIdle() const
     {
-        if (!initialized || !isIdle.load(std::memory_order_acquire))
-            return 0;
-
-        using namespace std::chrono;
-        uint64_t nowMs = static_cast<uint64_t>(
-            duration_cast<milliseconds>(
-                steady_clock::now().time_since_epoch()).count());
-        uint64_t start = idleStartMs.load(std::memory_order_relaxed);
-        return (nowMs > start) ? (nowMs - start) : 0;
+        return initialized && isIdle.load(std::memory_order_acquire);
     }
 };
 
@@ -320,13 +361,15 @@ WaylandIdleTracker& getTracker()
 
 std::once_flag g_trackerInitFlag;
 
-uint64_t getWaylandIdleTimeMs()
+bool getWaylandIdleStatus(uint64_t thresholdMs)
 {
-    std::call_once(g_trackerInitFlag, []()
+    std::call_once(g_trackerInitFlag, [thresholdMs]()
     {
-        getTracker().init();
+        getTracker().init(thresholdMs);
     });
-    return getTracker().getIdleMs();
+
+    getTracker().updateThreshold(thresholdMs);
+    return getTracker().getIsIdle();
 }
 
 void shutdownWaylandTracker()
@@ -369,13 +412,6 @@ uint64_t getIdleTimeMs()
     if (dbusIdle > 0)
         return dbusIdle;
 
-    // Non-GNOME Wayland (KDE/Plasma, Hyprland, Sway, niri, …)
-    // Requires ext-idle-notify-v1 protocol support in the compositor.
-#if defined(HAVE_WAYLAND_IDLE)
-    if (std::getenv("WAYLAND_DISPLAY") != nullptr)
-        return getWaylandIdleTimeMs();
-#endif
-
     return 0;
 #else
     return 0;
@@ -389,10 +425,58 @@ int l_getIdleStatus(lua_State* L)
 {
     uint64_t threshold = static_cast<uint64_t>(luaL_checkinteger(L, 1));
 
-    int status = (getIdleTimeMs() >= threshold) ? 1 : 0;
+#if defined(__linux__)
+    // Check if running on GNOME / Cinnamon first
+    const char* xdgDesktop = std::getenv("XDG_CURRENT_DESKTOP");
+    bool isGnomeOrCinnamon = false;
+    if (xdgDesktop != nullptr)
+    {
+        std::string desktopStr(xdgDesktop);
+        if (desktopStr.find("GNOME") != std::string::npos ||
+            desktopStr.find("gnome") != std::string::npos ||
+            desktopStr.find("Cinnamon") != std::string::npos ||
+            desktopStr.find("cinnamon") != std::string::npos)
+        {
+            isGnomeOrCinnamon = true;
+        }
+    }
 
+    if (isGnomeOrCinnamon)
+    {
+        int status = (getDbusIdleTimeMs() >= threshold) ? 1 : 0;
+        lua_pushinteger(L, status);
+        return 1;
+    }
+
+    // Attempt D-Bus idle monitor if Mutter/Muffin happens to be running
+    uint64_t dbusIdle = getDbusIdleTimeMs();
+    if (dbusIdle > 0)
+    {
+        int status = (dbusIdle >= threshold) ? 1 : 0;
+        lua_pushinteger(L, status);
+        return 1;
+    }
+
+#if defined(HAVE_WAYLAND_IDLE)
+    // Non-GNOME Wayland (KDE Plasma 6, Hyprland, Sway, niri, etc.)
+    if (std::getenv("WAYLAND_DISPLAY") != nullptr)
+    {
+        int status = getWaylandIdleStatus(threshold) ? 1 : 0;
+        lua_pushinteger(L, status);
+        return 1;
+    }
+#endif
+
+    int status = (getIdleTimeMs() >= threshold) ? 1 : 0;
     lua_pushinteger(L, status);
     return 1;
+
+#else
+    // Windows / Other OS
+    int status = (getIdleTimeMs() >= threshold) ? 1 : 0;
+    lua_pushinteger(L, status);
+    return 1;
+#endif
 }
 
 // Called from Lua's onExit() to cleanly stop any background threads
