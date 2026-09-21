@@ -112,3 +112,18 @@ end
 
 function onAction()
 	local configPath = HPR.getExtensionAbsoluteDir()
+
+	local os = HPR.getOsName()
+
+	if os == "Windows" then
+		HPR.runSystemCommand("explorer " .. configPath)
+	elseif os == "Linux" then
+		HPR.runSystemCommand("xdg-open " .. configPath)
+	end
+end
+
+function onExit()
+	if destroy then
+		destroy()
+	end
+end
