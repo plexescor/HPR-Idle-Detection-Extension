@@ -3,115 +3,112 @@ HPR.authorName = "Plexescor"
 
 --because HPR.getExtensionAbsoluteDir() api is introduced in
 -- v0.9.7, so this extension only supports HPR of this version and above(in the future)
-HPR.versionSupport = { "v0.9.7", "v0.9.8", "v0.9.9", "v0.9.10" }
+HPR.versionSupport = { "v0.9.7", "v0.9.8", "v0.9.9", "v0.9.10", "v0.9.11" }
 
 local initializer, err
 local started = true
 local defaultThreshold = 5 * 60 * 1000 --5min
-local defaultPollInterval = 5000        --5s
+local defaultPollInterval = 5000 --5s
 local currentIdleThreshold
 local currentPollInterval
 
 local ignoredTitles = {
-    "youtube",
+	"youtube",
+	"netflix",
 }
 
 function init()
-    HPR.log(HPR.extensionName, HPR.extensionName .. " Initialized")
+	local configPath = HPR.getExtensionDir() .. "idle_detection_config.csv"
+	HPR.log(HPR.extensionName, HPR.extensionName .. " Initialized")
 
-    local extDir = (HPR.getExtensionAbsoluteDir ~= nil) and HPR.getExtensionAbsoluteDir() or HPR.getExtensionDir()
+	local extDir = (HPR.getExtensionAbsoluteDir ~= nil) and HPR.getExtensionAbsoluteDir() or HPR.getExtensionDir()
 
-    local candidates = {}
-    if HPR.getOsName() == "Windows" then
-        candidates = {
-            extDir .. "HPR_Idle_Detection_Extension.dll",
-            extDir .. "libHPR_Idle_Detection_Extension.dll"
-        }
-    else
-        candidates = {
-            extDir .. "HPR_Idle_Detection_Extension.so",
-            extDir .. "libHPR_Idle_Detection_Extension.so"
-        }
-    end
+	local candidates = {}
+	if HPR.getOsName() == "Windows" then
+		candidates = {
+			extDir .. "HPR_Idle_Detection_Extension.dll",
+			extDir .. "libHPR_Idle_Detection_Extension.dll",
+		}
+	else
+		candidates = {
+			extDir .. "HPR_Idle_Detection_Extension.so",
+			extDir .. "libHPR_Idle_Detection_Extension.so",
+		}
+	end
 
-    HPR.log(HPR.extensionName, "Extension dir: " .. extDir)
-    HPR.log(HPR.extensionName, "package.loadlib = " .. tostring(package.loadlib))
+	HPR.log(HPR.extensionName, "Extension dir: " .. extDir)
+	HPR.log(HPR.extensionName, "package.loadlib = " .. tostring(package.loadlib))
 
-    local dllPath = candidates[1]
-    for _, path in ipairs(candidates) do
-        HPR.log(HPR.extensionName, "Attempting to load library: " .. path)
-        initializer, err = package.loadlib(path, "initialiseFunctions")
-        if initializer then
-            dllPath = path
-            break
-        end
-    end
+	local dllPath = candidates[1]
+	for _, path in ipairs(candidates) do
+		HPR.log(HPR.extensionName, "Attempting to load library: " .. path)
+		initializer, err = package.loadlib(path, "initialiseFunctions")
+		if initializer then
+			dllPath = path
+			break
+		end
+	end
 
-    HPR.log(HPR.extensionName, "Selected DLL path: " .. dllPath)
-    HPR.log(HPR.extensionName, "initializer = " .. tostring(initializer))
-    HPR.log(HPR.extensionName, "error = " .. tostring(err))
+	HPR.log(HPR.extensionName, "Selected DLL path: " .. dllPath)
+	HPR.log(HPR.extensionName, "initializer = " .. tostring(initializer))
+	HPR.log(HPR.extensionName, "error = " .. tostring(err))
 
-    if not initializer then
-        return
-    end
+	if not initializer then
+		return
+	end
 
-    HPR.log(HPR.extensionName, "Calling initialiseFunctions...")
-    initializer()
-    HPR.log(HPR.extensionName, "initialiseFunctions returned successfully")
+	HPR.log(HPR.extensionName, "Calling initialiseFunctions...")
+	initializer()
+	HPR.log(HPR.extensionName, "initialiseFunctions returned successfully")
 
-    local configPath = HPR.getExtensionDir() .. "idle_detection_config.csv"
+	-- idle-threshold
+	currentIdleThreshold = HPR.readCsv(configPath, "idle-threshold")
+	if currentIdleThreshold == "" then
+		HPR.writeCsv(configPath, "idle-threshold", defaultThreshold)
+		currentIdleThreshold = defaultThreshold
+	end
 
-    -- idle-threshold
-    currentIdleThreshold = HPR.readCsv(configPath, "idle-threshold")
-    if currentIdleThreshold == "" then
-        HPR.writeCsv(configPath, "idle-threshold", defaultThreshold)
-        currentIdleThreshold = defaultThreshold
-    end
+	-- poll-interval
+	currentPollInterval = HPR.readCsv(configPath, "poll-interval")
+	if currentPollInterval == "" then
+		HPR.writeCsv(configPath, "poll-interval", defaultPollInterval)
+		currentPollInterval = defaultPollInterval
+	end
 
-    -- poll-interval
-    currentPollInterval = HPR.readCsv(configPath, "poll-interval")
-    if currentPollInterval == "" then
-        HPR.writeCsv(configPath, "poll-interval", defaultPollInterval)
-        currentPollInterval = defaultPollInterval
-    end
+	HPR.log(HPR.extensionName, "idle-threshold = " .. tostring(currentIdleThreshold) .. "ms")
+	HPR.log(HPR.extensionName, "poll-interval  = " .. tostring(currentPollInterval) .. "ms")
 
-    HPR.log(HPR.extensionName, "idle-threshold = " .. tostring(currentIdleThreshold) .. "ms")
-    HPR.log(HPR.extensionName, "poll-interval  = " .. tostring(currentPollInterval) .. "ms")
-
-    return currentPollInterval
+	return currentPollInterval
 end
 
 function onTick(delta)
-    --What we will do is call a function and it returns some status
-    --sort of like this
+	--What we will do is call a function and it returns some status
+	--sort of like this
 
-    --int
-    --0 -> Not Idle
-    --1 -> Idle
-    
-    local status = getIdleStatus(currentIdleThreshold)
+	--int
+	--0 -> Not Idle
+	--1 -> Idle
 
-    local title = HPR.getCurrentTitle()
-    local foundIgnored = false
+	local status = getIdleStatus(currentIdleThreshold)
 
-    for _, searchTerm in ipairs(ignoredTitles) do
-        if string.find(string.lower(title), searchTerm, 1, true) then
-            foundIgnored = true
-            break
-        end
-    end
+	local title = HPR.getCurrentTitle()
+	local foundIgnored = false
 
-    if status == 1 and started and not foundIgnored then
-        HPR.stopTracking()
-        started = false
-    elseif status == 0 and not started then
-        HPR.startTracking()
-        started = true
-    end
+	for _, searchTerm in ipairs(ignoredTitles) do
+		if string.find(string.lower(title), searchTerm, 1, true) then
+			foundIgnored = true
+			break
+		end
+	end
+
+	if status == 1 and started and not foundIgnored then
+		HPR.stopTracking()
+		started = false
+	elseif status == 0 and not started then
+		HPR.startTracking()
+		started = true
+	end
 end
 
-function onExit()
-    if destroy then
-        destroy()
-    end
-end
+function onAction()
+	local configPath = HPR.getExtensionAbsoluteDir()
