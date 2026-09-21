@@ -115,10 +115,15 @@ function onAction()
 
 	local os = HPR.getOsName()
 
+	HPR.log(HPR.extensionName, "onAction configPath = " .. tostring(configPath))
+
 	if os == "Windows" then
-		HPR.runSystemCommand("explorer " .. configPath)
+		configPath = configPath:gsub("/", "\\")   -- normalize to backslashes
+		configPath = configPath:gsub("\\+$", "")  -- strip trailing backslash
+		HPR.log(HPR.extensionName, "Final configPath = " .. configPath)
+		HPR.runSystemCommand('explorer "' .. configPath .. '"')
 	elseif os == "Linux" then
-		HPR.runSystemCommand("xdg-open " .. configPath)
+		HPR.runSystemCommand('xdg-open "' .. configPath .. '"')
 	end
 end
 
