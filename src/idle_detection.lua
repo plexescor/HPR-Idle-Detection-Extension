@@ -3,7 +3,7 @@ HPR.authorName = "Plexescor"
 
 --because HPR.getExtensionAbsoluteDir() api is introduced in
 -- v0.9.7, so this extension only supports HPR of this version and above(in the future)
-HPR.versionSupport = { "v0.9.7", "v0.9.8", "v0.9.9", "v0.9.10", "v0.9.11" }
+HPR.versionSupport = { "v0.9.7", "v0.9.8", "v0.9.9", "v0.9.10", "v0.9.11", "v0.9.12" }
 
 local initializer, err
 local started = true
